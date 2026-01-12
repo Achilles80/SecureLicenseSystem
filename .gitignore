@@ -1,0 +1,7 @@
+# Ignore Database and Keys
+backend/*.db
+backend/__pycache__/
+
+# Ignore System files
+.DS_Store
+Thumbs.db
