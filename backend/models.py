@@ -138,6 +138,21 @@ def get_all_users():
     return users
 
 
+def update_user_password(username: str, password_hash: str, salt: str) -> bool:
+    """Update a user's password in the database."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "UPDATE users SET password_hash = ?, salt = ? WHERE username = ?",
+            (password_hash, salt, username)
+        )
+        conn.commit()
+        updated = c.rowcount > 0
+        return updated
+    finally:
+        conn.close()
+
 # =============================================================================
 # OTP OPERATIONS
 # =============================================================================

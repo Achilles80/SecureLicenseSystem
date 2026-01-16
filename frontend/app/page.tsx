@@ -1,47 +1,19 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [pendingUsername, setPendingUsername] = useState("");
-  const [role, setRole] = useState("user");
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState("");
 
   const router = useRouter();
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch("http://127.0.0.1:5000/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, role }),
-      });
-      const data = await res.json();
-
-      if (res.ok) {
-        alert("✅ Registration Successful! Please Login.");
-        setIsRegistering(false);
-        setUsername("");
-        setPassword("");
-      } else {
-        setError(data.error || "Registration failed");
-      }
-    } catch (err) {
-      setError("Failed to connect to backend. Is Python running?");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +39,35 @@ export default function LoginPage() {
       setError("Failed to connect to backend. Is Python running?");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setGuestLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/auth/guest-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        // Store JWT token and user info
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("username", data.username);
+        localStorage.setItem("role", data.role);
+
+        // Redirect to dashboard
+        router.push("/dashboard");
+      } else {
+        setError(data.error || "Guest login failed");
+      }
+    } catch (err) {
+      setError("Failed to connect to backend. Is Python running?");
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -104,7 +105,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-black text-white p-6">
       <div className="w-full max-w-md bg-gray-900 p-8 rounded-lg border border-gray-800 shadow-xl">
         <h1 className="text-3xl font-bold mb-2 text-center bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-          {isRegistering ? "SECURE REGISTER" : "SECURE LOGIN"}
+          SECURE LOGIN
         </h1>
         <p className="text-center text-gray-500 text-sm mb-6">
           Multi-Factor Authentication Enabled
@@ -116,10 +117,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form
-          onSubmit={isRegistering ? handleRegister : handleLogin}
-          className="flex flex-col gap-4"
-        >
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <input
             className="bg-gray-800 border border-gray-700 p-3 rounded text-white focus:border-blue-500 outline-none"
             placeholder="Username"
@@ -136,50 +134,53 @@ export default function LoginPage() {
             required
           />
 
-          {isRegistering && (
-            <select
-              className="bg-gray-800 border border-gray-700 p-3 rounded text-white focus:border-blue-500 outline-none"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-            >
-              <option value="user">User (Can validate only)</option>
-              <option value="admin">Admin (Full access)</option>
-              <option value="guest">Guest (Limited access)</option>
-            </select>
-          )}
-
           <button
             type="submit"
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-bold p-3 rounded mt-2 transition-colors"
           >
-            {loading
-              ? "Processing..."
-              : isRegistering
-                ? "CREATE ACCOUNT"
-                : "AUTHENTICATE"}
+            {loading ? "Processing..." : "AUTHENTICATE"}
           </button>
         </form>
 
+        {/* Guest Login Button */}
         <button
-          onClick={() => {
-            setIsRegistering(!isRegistering);
-            setError("");
-          }}
-          className="mt-4 text-sm text-gray-400 hover:text-white underline w-full text-center"
+          onClick={handleGuestLogin}
+          disabled={guestLoading}
+          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-bold p-3 rounded mt-3 transition-colors flex items-center justify-center gap-2"
         >
-          {isRegistering
-            ? "Already have an account? Login"
-            : "Need an account? Register"}
+          {guestLoading ? (
+            "Logging in..."
+          ) : (
+            <>
+              <span>👤</span> LOGIN AS GUEST
+            </>
+          )}
         </button>
+        <p className="text-center text-gray-500 text-xs mt-1">
+          Guest can only validate licenses (no MFA required)
+        </p>
 
-        <div className="mt-4 text-center">
-          <a
+        {/* Links */}
+        <div className="mt-6 pt-4 border-t border-gray-800 flex flex-col gap-2">
+          <Link
+            href="/signup"
+            className="text-center text-sm text-blue-400 hover:text-blue-300 underline"
+          >
+            Need an account? Sign Up
+          </Link>
+          <Link
+            href="/reset-password"
+            className="text-center text-sm text-orange-400 hover:text-orange-300 underline"
+          >
+            Forgot Password?
+          </Link>
+          <Link
             href="/validate"
-            className="text-sm text-green-400 hover:underline"
+            className="text-center text-sm text-green-400 hover:underline"
           >
             Go to Public Validator →
-          </a>
+          </Link>
         </div>
       </div>
 
