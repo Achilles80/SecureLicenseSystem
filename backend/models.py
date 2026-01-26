@@ -230,7 +230,20 @@ def get_all_licenses():
     """Retrieve all licenses (for admin view)."""
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT id, issued_to, issued_by, created_at FROM licenses")
+    c.execute("SELECT id, issued_to, issued_by, token_blob, created_at FROM licenses")
+    licenses = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return licenses
+
+
+def get_user_licenses(username: str):
+    """Retrieve licenses issued TO a specific user."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, issued_to, issued_by, token_blob, created_at FROM licenses WHERE issued_to = ?",
+        (username,)
+    )
     licenses = [dict(row) for row in c.fetchall()]
     conn.close()
     return licenses

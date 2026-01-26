@@ -1,7 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function Validate() {
+  const searchParams = useSearchParams();
   const [token, setToken] = useState("");
   const [result, setResult] = useState<{
     valid: boolean;
@@ -9,6 +11,14 @@ export default function Validate() {
     error?: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Read token from URL query param on mount
+  useEffect(() => {
+    const tokenFromUrl = searchParams.get("token");
+    if (tokenFromUrl) {
+      setToken(tokenFromUrl);
+    }
+  }, [searchParams]);
 
   const handleValidate = async () => {
     setLoading(true);
@@ -90,8 +100,8 @@ export default function Validate() {
         {result && (
           <div
             className={`p-4 rounded border ${result.valid
-                ? "bg-green-50 border-green-200"
-                : "bg-red-50 border-red-200"
+              ? "bg-green-50 border-green-200"
+              : "bg-red-50 border-red-200"
               }`}
           >
             {result.valid ? (

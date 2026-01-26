@@ -8,6 +8,14 @@ interface User {
   created_at: string;
 }
 
+interface License {
+  id: number;
+  issued_to: string;
+  issued_by: string;
+  token_blob: string;
+  created_at: string;
+}
+
 export default function Dashboard() {
   const [clientName, setClientName] = useState("");
   const [generatedKey, setGeneratedKey] = useState("");
@@ -15,6 +23,8 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [users, setUsers] = useState<User[]>([]);
   const [showUsers, setShowUsers] = useState(false);
+  const [myLicenses, setMyLicenses] = useState<License[]>([]);
+  const [showMyLicenses, setShowMyLicenses] = useState(false);
   const [currentUser, setCurrentUser] = useState<{
     username: string;
     role: string;
@@ -101,6 +111,30 @@ export default function Dashboard() {
     router.push("/");
   };
 
+  const handleViewMyLicenses = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/my-licenses", {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setMyLicenses(data.licenses);
+        setShowMyLicenses(true);
+      } else {
+        setError(data.error || "Failed to fetch licenses");
+      }
+    } catch (err) {
+      setError("Failed to connect to backend");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isAdmin = currentUser?.role === "admin";
 
   return (
@@ -146,6 +180,15 @@ export default function Dashboard() {
               <span className="block font-bold">View Users</span>
               <span>{isAdmin ? "✅ Allowed" : "❌ Denied"}</span>
             </div>
+          </div>
+          {/* Quick Validate Button for All Users */}
+          <div className="mt-4">
+            <a
+              href="/validate"
+              className="inline-block bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded"
+            >
+              🔍 VALIDATE A TOKEN
+            </a>
           </div>
         </div>
 
@@ -249,10 +292,10 @@ export default function Dashboard() {
                           <td className="p-3">
                             <span
                               className={`px-2 py-1 rounded text-xs ${user.role === "admin"
-                                  ? "bg-purple-900 text-purple-300"
-                                  : user.role === "user"
-                                    ? "bg-blue-900 text-blue-300"
-                                    : "bg-gray-700 text-gray-300"
+                                ? "bg-purple-900 text-purple-300"
+                                : user.role === "user"
+                                  ? "bg-blue-900 text-blue-300"
+                                  : "bg-gray-700 text-gray-300"
                                 }`}
                             >
                               {user.role}
@@ -269,6 +312,69 @@ export default function Dashboard() {
               )}
             </div>
           )}
+
+          {/* My Licenses Section (All Users) */}
+          <div className="mt-8 pt-8 border-t border-gray-800">
+            <h2 className="text-lg font-bold mb-4 text-cyan-400">
+              🎫 My Licenses
+            </h2>
+            <p className="text-gray-500 text-xs mb-4">
+              View licenses issued to your username. Admin generates licenses with your username as client name.
+            </p>
+            <button
+              onClick={handleViewMyLicenses}
+              disabled={loading || currentUser?.role === "guest"}
+              className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold px-6 py-2 rounded"
+            >
+              {loading ? "Loading..." : "VIEW MY LICENSES"}
+            </button>
+            {currentUser?.role === "guest" && (
+              <p className="text-yellow-400 text-xs mt-2">
+                ⚠️ Login with a user account to view your licenses
+              </p>
+            )}
+
+            {showMyLicenses && (
+              <div className="mt-4">
+                {myLicenses.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No licenses found for your username.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {myLicenses.map((license) => (
+                      <div key={license.id} className="bg-black p-4 rounded border border-cyan-500/30">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <span className="text-gray-400 text-xs">License #{license.id}</span>
+                            <p className="text-cyan-300 text-sm">Issued by: {license.issued_by}</p>
+                            <p className="text-gray-500 text-xs">{license.created_at}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => navigator.clipboard.writeText(license.token_blob)}
+                              className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded"
+                            >
+                              📋 Copy
+                            </button>
+                            <a
+                              href={`/validate?token=${encodeURIComponent(license.token_blob)}`}
+                              className="text-xs bg-green-700 hover:bg-green-600 px-3 py-1 rounded"
+                            >
+                              🔍 Validate
+                            </a>
+                          </div>
+                        </div>
+                        <div className="bg-gray-900 p-2 rounded mt-2">
+                          <code className="text-xs text-green-300 break-all">
+                            {license.token_blob}
+                          </code>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Navigation */}

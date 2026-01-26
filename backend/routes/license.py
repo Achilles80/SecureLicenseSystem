@@ -57,7 +57,7 @@ def generate_license():
     models.save_license(
         issued_to=client_name,
         issued_by=issued_by,
-        token_blob=token[:50] + "...",  # Store truncated for DB
+        token_blob=token,  # Store full token for user retrieval
         signature="RSA-PSS-SHA256"
     )
     
@@ -175,6 +175,30 @@ def get_all_licenses():
     return jsonify({
         "licenses": licenses,
         "total": len(licenses)
+    }), 200
+
+
+@license_bp.route('/my-licenses', methods=['GET'])
+@require_auth
+def get_my_licenses():
+    """
+    Get licenses issued TO the current user.
+    
+    ACCESS: Any authenticated user
+    
+    This allows users to see licenses that have been issued to them.
+    Users search by their username (client name).
+    
+    Response:
+        200: List of user's licenses with full token
+    """
+    username = g.current_user['username']
+    licenses = models.get_user_licenses(username)
+    
+    return jsonify({
+        "licenses": licenses,
+        "total": len(licenses),
+        "message": f"Licenses issued to '{username}'"
     }), 200
 
 
