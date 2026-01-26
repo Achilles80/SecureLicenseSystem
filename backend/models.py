@@ -18,8 +18,7 @@ def get_db_connection():
 def init_db():
     """
     Initialize database tables.
-    Creates users, otp_codes, and licenses tables if they don't exist.
-    Also seeds default users for testing.
+    Creates users, otp_codes, licenses, audit_logs, and login_attempts tables.
     """
     conn = get_db_connection()
     c = conn.cursor()
@@ -48,7 +47,7 @@ def init_db():
         )
     ''')
     
-    # Licenses table for audit trail
+    # Licenses table with expiry
     c.execute('''
         CREATE TABLE IF NOT EXISTS licenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,13 +55,37 @@ def init_db():
             issued_by TEXT NOT NULL,
             token_blob TEXT NOT NULL,
             signature TEXT NOT NULL,
+            expires_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Audit Logs table - tracks all security events
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            username TEXT,
+            action TEXT NOT NULL,
+            details TEXT,
+            ip_address TEXT
+        )
+    ''')
+    
+    # Login Attempts table - for rate limiting
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            ip_address TEXT,
+            attempt_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            success INTEGER DEFAULT 0
         )
     ''')
     
     conn.commit()
     conn.close()
-    print("✅ Database initialized")
+    print("[+] Database initialized")
 
 
 def seed_default_users():
@@ -212,13 +235,13 @@ def verify_otp(username: str, otp_code: str) -> bool:
 # LICENSE OPERATIONS
 # =============================================================================
 
-def save_license(issued_to: str, issued_by: str, token_blob: str, signature: str):
-    """Save a generated license to the database."""
+def save_license(issued_to: str, issued_by: str, token_blob: str, signature: str, expires_at: str = None):
+    """Save a generated license to the database with optional expiry."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO licenses (issued_to, issued_by, token_blob, signature) VALUES (?, ?, ?, ?)",
-        (issued_to, issued_by, token_blob, signature)
+        "INSERT INTO licenses (issued_to, issued_by, token_blob, signature, expires_at) VALUES (?, ?, ?, ?, ?)",
+        (issued_to, issued_by, token_blob, signature, expires_at)
     )
     conn.commit()
     license_id = c.lastrowid
@@ -230,7 +253,7 @@ def get_all_licenses():
     """Retrieve all licenses (for admin view)."""
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT id, issued_to, issued_by, token_blob, created_at FROM licenses")
+    c.execute("SELECT id, issued_to, issued_by, token_blob, expires_at, created_at FROM licenses")
     licenses = [dict(row) for row in c.fetchall()]
     conn.close()
     return licenses
@@ -241,9 +264,71 @@ def get_user_licenses(username: str):
     conn = get_db_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT id, issued_to, issued_by, token_blob, created_at FROM licenses WHERE issued_to = ?",
+        "SELECT id, issued_to, issued_by, token_blob, expires_at, created_at FROM licenses WHERE issued_to = ?",
         (username,)
     )
     licenses = [dict(row) for row in c.fetchall()]
     conn.close()
     return licenses
+
+
+# =============================================================================
+# AUDIT LOGGING
+# =============================================================================
+
+def log_audit(username: str, action: str, details: str = None, ip_address: str = None):
+    """Log an audit event for security monitoring."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO audit_logs (username, action, details, ip_address) VALUES (?, ?, ?, ?)",
+        (username, action, details, ip_address)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_audit_logs(limit: int = 100):
+    """Retrieve recent audit logs (for admin view)."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,))
+    logs = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return logs
+
+
+# =============================================================================
+# RATE LIMITING
+# =============================================================================
+
+def record_login_attempt(username: str, success: bool, ip_address: str = None):
+    """Record a login attempt for rate limiting."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO login_attempts (username, ip_address, success) VALUES (?, ?, ?)",
+        (username, ip_address, 1 if success else 0)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_failed_attempts(username: str, minutes: int = 15) -> int:
+    """Get number of failed login attempts in the last N minutes."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    cutoff = datetime.now() - timedelta(minutes=minutes)
+    c.execute(
+        "SELECT COUNT(*) FROM login_attempts WHERE username = ? AND success = 0 AND attempt_time > ?",
+        (username, cutoff)
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+
+def is_rate_limited(username: str, max_attempts: int = 5, window_minutes: int = 15) -> bool:
+    """Check if user is rate limited due to too many failed attempts."""
+    failed = get_failed_attempts(username, window_minutes)
+    return failed >= max_attempts

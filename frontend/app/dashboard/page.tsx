@@ -13,7 +13,17 @@ interface License {
   issued_to: string;
   issued_by: string;
   token_blob: string;
+  expires_at: string;
   created_at: string;
+}
+
+interface AuditLog {
+  id: number;
+  timestamp: string;
+  username: string;
+  action: string;
+  details: string;
+  ip_address: string;
 }
 
 export default function Dashboard() {
@@ -25,6 +35,8 @@ export default function Dashboard() {
   const [showUsers, setShowUsers] = useState(false);
   const [myLicenses, setMyLicenses] = useState<License[]>([]);
   const [showMyLicenses, setShowMyLicenses] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [currentUser, setCurrentUser] = useState<{
     username: string;
     role: string;
@@ -127,6 +139,30 @@ export default function Dashboard() {
         setShowMyLicenses(true);
       } else {
         setError(data.error || "Failed to fetch licenses");
+      }
+    } catch (err) {
+      setError("Failed to connect to backend");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewAuditLogs = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/audit-logs?limit=50", {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setAuditLogs(data.audit_logs);
+        setShowAuditLogs(true);
+      } else {
+        setError(data.error || "Failed to fetch audit logs");
       }
     } catch (err) {
       setError("Failed to connect to backend");
@@ -346,7 +382,10 @@ export default function Dashboard() {
                           <div>
                             <span className="text-gray-400 text-xs">License #{license.id}</span>
                             <p className="text-cyan-300 text-sm">Issued by: {license.issued_by}</p>
-                            <p className="text-gray-500 text-xs">{license.created_at}</p>
+                            <p className="text-gray-500 text-xs">Created: {license.created_at}</p>
+                            {license.expires_at && (
+                              <p className="text-yellow-400 text-xs">Expires: {license.expires_at}</p>
+                            )}
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -375,6 +414,61 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          {/* Audit Logs Section (Admin Only) */}
+          {isAdmin && (
+            <div className="mt-8 pt-8 border-t border-gray-800">
+              <h2 className="text-lg font-bold mb-4 text-orange-400">
+                📋 Audit Logs
+              </h2>
+              <p className="text-gray-500 text-xs mb-4">
+                Security event logs for monitoring system activity.
+              </p>
+              <button
+                onClick={handleViewAuditLogs}
+                disabled={loading}
+                className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 text-white font-bold px-6 py-2 rounded"
+              >
+                {loading ? "Loading..." : "VIEW AUDIT LOGS"}
+              </button>
+
+              {showAuditLogs && auditLogs.length > 0 && (
+                <div className="mt-4 bg-black rounded border border-orange-500/30 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-700 text-gray-400">
+                        <th className="p-2 text-left">Time</th>
+                        <th className="p-2 text-left">User</th>
+                        <th className="p-2 text-left">Action</th>
+                        <th className="p-2 text-left">Details</th>
+                        <th className="p-2 text-left">IP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.map((log) => (
+                        <tr key={log.id} className="border-b border-gray-800 hover:bg-gray-900">
+                          <td className="p-2 text-gray-500">{log.timestamp}</td>
+                          <td className="p-2 text-cyan-300">{log.username || "-"}</td>
+                          <td className="p-2">
+                            <span className={`px-2 py-0.5 rounded text-xs ${log.action.includes("FAILED") || log.action.includes("RATE_LIMITED")
+                                ? "bg-red-900 text-red-300"
+                                : log.action.includes("GENERATED")
+                                  ? "bg-green-900 text-green-300"
+                                  : "bg-blue-900 text-blue-300"
+                              }`}>
+                              {log.action}
+                            </span>
+                          </td>
+                          <td className="p-2 text-gray-400">{log.details || "-"}</td>
+                          <td className="p-2 text-gray-500">{log.ip_address || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Navigation */}

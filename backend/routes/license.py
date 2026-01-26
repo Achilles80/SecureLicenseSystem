@@ -26,47 +26,62 @@ license_bp = Blueprint('license', __name__)
 @require_role('generate_license')
 def generate_license():
     """
-    Generate a new encrypted signed license.
+    Generate a new encrypted signed license with expiry.
     
     ACCESS: Admin only
     
     Request Body:
-        {
-            "client_name": "string"
-        }
+        {"client_name": "string", "expiry_days": int (optional, default 30)}
     
     Response:
-        200: License token generated
-        403: Access denied for non-admin users
+        200: License token with expiry date
+        403: Access denied
     """
+    from datetime import datetime, timedelta
+    
     data = request.json
     
     if not data:
         return jsonify({"error": "Request body required"}), 400
     
     client_name = data.get('client_name', '').strip()
+    expiry_days = data.get('expiry_days', 30)  # Default 30 days
     
     if not client_name:
         return jsonify({"error": "Client name is required"}), 400
     
+    # Calculate expiry date
+    expires_at = datetime.now() + timedelta(days=expiry_days)
+    expires_at_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
+    
     # Generate license token (encrypts, signs, encodes)
     token = create_license_token(client_name)
     
-    # Save to database for audit trail
+    # Save to database with expiry
     issued_by = g.current_user['username']
-    models.save_license(
+    license_id = models.save_license(
         issued_to=client_name,
         issued_by=issued_by,
-        token_blob=token,  # Store full token for user retrieval
-        signature="RSA-PSS-SHA256"
+        token_blob=token,
+        signature="RSA-PSS-SHA256",
+        expires_at=expires_at_str
     )
     
-    print(f"✅ License generated for '{client_name}' by {issued_by}")
+    # Audit log
+    models.log_audit(
+        username=issued_by,
+        action="LICENSE_GENERATED",
+        details=f"License #{license_id} for {client_name}, expires {expires_at_str}",
+        ip_address=request.remote_addr
+    )
+    
+    print(f"[+] License generated for '{client_name}' by {issued_by} (expires: {expires_at_str})")
     
     return jsonify({
         "license_key": token,
         "issued_to": client_name,
         "issued_by": issued_by,
+        "expires_at": expires_at_str,
         "encryption": "AES-256-CBC",
         "signature": "RSA-PSS-SHA256",
         "encoding": "Base64"
@@ -234,3 +249,27 @@ def get_acl_info():
     Shows the ACM, role descriptions, and NIST compliance info.
     """
     return jsonify(get_access_control_info()), 200
+
+
+@license_bp.route('/audit-logs', methods=['GET'])
+@require_role('view_users')
+def get_audit_logs_endpoint():
+    """
+    Get audit logs for security monitoring.
+    
+    ACCESS: Admin only
+    
+    Query Params:
+        limit: Number of logs to return (default 100)
+    
+    Response:
+        200: List of audit events
+    """
+    limit = request.args.get('limit', 100, type=int)
+    logs = models.get_audit_logs(limit)
+    
+    return jsonify({
+        "audit_logs": logs,
+        "total": len(logs),
+        "accessed_by": g.current_user['username']
+    }), 200

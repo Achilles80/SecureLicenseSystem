@@ -8,8 +8,6 @@ This application demonstrates core security concepts:
 4. Hashing & Digital Signatures (PBKDF2 + RSA-PSS)
 5. Encoding (Base64)
 
-Author: Lab Evaluation Submission
-Course: 23CSE313 - Foundations of Cyber Security
 """
 
 from flask import Flask
@@ -78,7 +76,7 @@ def main():
     # Create and run app
     app = create_app()
     
-    print("\n🚀 Starting server on http://127.0.0.1:5000")
+    print("\n  Starting server on http://127.0.0.1:5000")
     print("=" * 70 + "\n")
     
     app.run(debug=True, port=5000)

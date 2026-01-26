@@ -146,19 +146,15 @@ def guest_login():
 @auth_bp.route('/login', methods=['POST'])
 def login():
     """
-    Authenticate user (Step 1 of MFA).
-    
-    This verifies the password and sends an OTP for the second factor.
+    Authenticate user (Step 1 of MFA) with rate limiting.
     
     Request Body:
-        {
-            "username": "string",
-            "password": "string"
-        }
+        {"username": "string", "password": "string"}
     
     Response:
-        200: OTP sent, proceed to /auth/verify-otp
+        200: OTP sent
         401: Invalid credentials
+        429: Rate limited (too many failed attempts)
     """
     data = request.json
     
@@ -167,16 +163,33 @@ def login():
     
     username = data.get('username', '').strip()
     password = data.get('password', '')
+    ip_address = request.remote_addr
+    
+    # Rate Limiting: Check if too many failed attempts
+    if models.is_rate_limited(username):
+        models.log_audit(username, "LOGIN_RATE_LIMITED", "Too many failed attempts", ip_address)
+        return jsonify({
+            "error": "Too many failed login attempts",
+            "message": "Please wait 15 minutes before trying again"
+        }), 429
     
     # Get user from database
     user = models.get_user(username)
     
     if not user:
+        models.record_login_attempt(username, success=False, ip_address=ip_address)
+        models.log_audit(username, "LOGIN_FAILED", "User not found", ip_address)
         return jsonify({"error": "Invalid credentials"}), 401
     
     # Verify password (Factor 1: Something you know)
     if not verify_password(password, user['password_hash'], user['salt']):
+        models.record_login_attempt(username, success=False, ip_address=ip_address)
+        models.log_audit(username, "LOGIN_FAILED", "Invalid password", ip_address)
         return jsonify({"error": "Invalid credentials"}), 401
+    
+    # Success - record attempt and log
+    models.record_login_attempt(username, success=True, ip_address=ip_address)
+    models.log_audit(username, "LOGIN_PASSWORD_OK", "Password verified, OTP sent", ip_address)
     
     # Generate OTP (Factor 2: Something you have)
     otp = generate_otp()
