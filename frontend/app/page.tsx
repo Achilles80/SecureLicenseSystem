@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -12,8 +12,27 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState("");
+  const [otpTimer, setOtpTimer] = useState(0); // Timer in seconds
 
   const router = useRouter();
+
+  // OTP countdown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [otpTimer]);
+
+  // Format seconds to MM:SS
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +51,7 @@ export default function LoginPage() {
         // Show OTP modal for MFA
         setPendingUsername(username);
         setShowOtpModal(true);
+        setOtpTimer(300); // 5 minutes = 300 seconds
       } else if (!res.ok) {
         setError(data.error || "Login failed");
       }
@@ -191,9 +211,29 @@ export default function LoginPage() {
             <h2 className="text-xl font-bold mb-2 text-center text-green-400">
               🔐 MFA Verification
             </h2>
-            <p className="text-gray-400 text-sm text-center mb-4">
+            <p className="text-gray-400 text-sm text-center mb-2">
               Enter the 6-digit OTP code shown in the server console
             </p>
+
+            {/* OTP Timer Display */}
+            <div className={`text-center mb-4 p-2 rounded border ${otpTimer > 60
+                ? "bg-green-900/20 border-green-500/50 text-green-400"
+                : otpTimer > 0
+                  ? "bg-red-900/20 border-red-500/50 text-red-400 animate-pulse"
+                  : "bg-gray-800 border-gray-700 text-gray-500"
+              }`}>
+              {otpTimer > 0 ? (
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-lg">⏱️</span>
+                  <span className="font-mono text-xl font-bold">{formatTime(otpTimer)}</span>
+                  <span className="text-xs">remaining</span>
+                </div>
+              ) : (
+                <div className="text-sm">
+                  ⚠️ OTP Expired - Please request a new one
+                </div>
+              )}
+            </div>
 
             {error && (
               <div className="bg-red-900/30 border border-red-500 text-red-300 p-2 rounded mb-4 text-sm text-center">
@@ -212,7 +252,7 @@ export default function LoginPage() {
 
             <button
               onClick={handleVerifyOtp}
-              disabled={loading || otp.length !== 6}
+              disabled={loading || otp.length !== 6 || otpTimer === 0}
               className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-bold p-3 rounded transition-colors"
             >
               {loading ? "Verifying..." : "VERIFY OTP"}
@@ -223,6 +263,7 @@ export default function LoginPage() {
                 setShowOtpModal(false);
                 setOtp("");
                 setError("");
+                setOtpTimer(0);
               }}
               className="w-full mt-2 text-gray-400 hover:text-white text-sm underline"
             >

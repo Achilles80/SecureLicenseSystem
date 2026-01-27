@@ -21,6 +21,7 @@ export default function ResetPasswordPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+    const [otpTimer, setOtpTimer] = useState(0); // Timer in seconds
     const [passwordValidation, setPasswordValidation] = useState<PasswordValidation>({
         minLength: false,
         hasUppercase: false,
@@ -39,6 +40,24 @@ export default function ResetPasswordPage() {
             hasSpecial: /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(newPassword),
         });
     }, [newPassword]);
+
+    // OTP countdown timer effect
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (otpTimer > 0) {
+            interval = setInterval(() => {
+                setOtpTimer((prev) => prev - 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [otpTimer]);
+
+    // Format seconds to MM:SS
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+    };
 
     const isPasswordValid = Object.values(passwordValidation).every(Boolean);
     const passwordsMatch = newPassword === confirmPassword && confirmPassword !== "";
@@ -60,6 +79,7 @@ export default function ResetPasswordPage() {
             if (res.ok) {
                 setStep("otp");
                 setSuccess("OTP has been sent! Check the server console.");
+                setOtpTimer(300); // 5 minutes = 300 seconds
             } else {
                 setError(data.error || "Failed to send OTP");
             }
@@ -218,6 +238,26 @@ export default function ResetPasswordPage() {
                             </p>
                         </div>
 
+                        {/* OTP Timer Display */}
+                        <div className={`text-center p-3 rounded border ${otpTimer > 60
+                                ? "bg-green-900/20 border-green-500/50 text-green-400"
+                                : otpTimer > 0
+                                    ? "bg-red-900/20 border-red-500/50 text-red-400 animate-pulse"
+                                    : "bg-gray-800 border-gray-700 text-gray-500"
+                            }`}>
+                            {otpTimer > 0 ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <span className="text-lg">⏱️</span>
+                                    <span className="font-mono text-xl font-bold">{formatTime(otpTimer)}</span>
+                                    <span className="text-xs">remaining</span>
+                                </div>
+                            ) : (
+                                <div className="text-sm">
+                                    ⚠️ OTP Expired - Please go back and request a new one
+                                </div>
+                            )}
+                        </div>
+
                         <div>
                             <label className="text-gray-400 text-sm mb-1 block">
                                 OTP Code
@@ -235,7 +275,7 @@ export default function ResetPasswordPage() {
 
                         <button
                             type="submit"
-                            disabled={otp.length !== 6}
+                            disabled={otp.length !== 6 || otpTimer === 0}
                             className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white font-bold p-3 rounded mt-2 transition-colors"
                         >
                             VERIFY OTP
@@ -248,6 +288,7 @@ export default function ResetPasswordPage() {
                                 setOtp("");
                                 setError("");
                                 setSuccess("");
+                                setOtpTimer(0);
                             }}
                             className="text-gray-400 hover:text-white text-sm underline"
                         >
@@ -265,10 +306,10 @@ export default function ResetPasswordPage() {
                             </label>
                             <input
                                 className={`w-full bg-gray-800 border p-3 rounded text-white outline-none transition-colors ${newPassword === ""
-                                        ? "border-gray-700"
-                                        : isPasswordValid
-                                            ? "border-green-500"
-                                            : "border-red-500"
+                                    ? "border-gray-700"
+                                    : isPasswordValid
+                                        ? "border-green-500"
+                                        : "border-red-500"
                                     }`}
                                 type="password"
                                 placeholder="Create a strong password"
@@ -310,10 +351,10 @@ export default function ResetPasswordPage() {
                             </label>
                             <input
                                 className={`w-full bg-gray-800 border p-3 rounded text-white outline-none transition-colors ${confirmPassword === ""
-                                        ? "border-gray-700"
-                                        : passwordsMatch
-                                            ? "border-green-500"
-                                            : "border-red-500"
+                                    ? "border-gray-700"
+                                    : passwordsMatch
+                                        ? "border-green-500"
+                                        : "border-red-500"
                                     }`}
                                 type="password"
                                 placeholder="Confirm your new password"
