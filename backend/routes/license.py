@@ -177,20 +177,64 @@ def validate_license_public():
 @require_role('view_users')
 def get_all_licenses():
     """
-    Get all issued licenses.
+    Get all issued licenses with optional username filter.
+    
+    ACCESS: Admin only
+    
+    Query Params:
+        username: Filter licenses by issued_to (client name) - partial match
+    
+    Response:
+        200: List of all licenses (filtered if username provided)
+        403: Access denied for non-admin users
+    """
+    username_filter = request.args.get('username', None)
+    
+    if username_filter:
+        licenses = models.get_licenses_filtered(username_filter)
+    else:
+        licenses = models.get_all_licenses()
+    
+    return jsonify({
+        "licenses": licenses,
+        "total": len(licenses),
+        "filtered_by": username_filter if username_filter else None
+    }), 200
+
+
+@license_bp.route('/licenses/<int:license_id>', methods=['DELETE'])
+@require_role('view_users')
+def delete_license(license_id):
+    """
+    Delete a license by ID.
     
     ACCESS: Admin only
     
     Response:
-        200: List of all licenses
+        200: License deleted successfully
+        404: License not found
         403: Access denied for non-admin users
     """
-    licenses = models.get_all_licenses()
+    deleted = models.delete_license(license_id)
     
-    return jsonify({
-        "licenses": licenses,
-        "total": len(licenses)
-    }), 200
+    if deleted:
+        # Audit log
+        models.log_audit(
+            username=g.current_user['username'],
+            action="LICENSE_DELETED",
+            details=f"License #{license_id} deleted",
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": f"License #{license_id} deleted successfully"
+        }), 200
+    else:
+        return jsonify({
+            "success": False,
+            "error": f"License #{license_id} not found"
+        }), 404
 
 
 @license_bp.route('/my-licenses', methods=['GET'])

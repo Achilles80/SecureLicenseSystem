@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function Validate() {
+function ValidateContent() {
   const searchParams = useSearchParams();
   const [token, setToken] = useState("");
   const [result, setResult] = useState<{
@@ -16,7 +16,7 @@ export default function Validate() {
   useEffect(() => {
     const tokenFromUrl = searchParams.get("token");
     if (tokenFromUrl) {
-      setToken(tokenFromUrl);
+      setToken(decodeURIComponent(tokenFromUrl));
     }
   }, [searchParams]);
 
@@ -153,5 +153,17 @@ export default function Validate() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Validate() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    }>
+      <ValidateContent />
+    </Suspense>
   );
 }

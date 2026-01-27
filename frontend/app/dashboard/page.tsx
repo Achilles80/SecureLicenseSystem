@@ -35,6 +35,9 @@ export default function Dashboard() {
   const [showUsers, setShowUsers] = useState(false);
   const [myLicenses, setMyLicenses] = useState<License[]>([]);
   const [showMyLicenses, setShowMyLicenses] = useState(false);
+  const [allLicenses, setAllLicenses] = useState<License[]>([]);
+  const [showAllLicenses, setShowAllLicenses] = useState(false);
+  const [licenseFilter, setLicenseFilter] = useState("");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [currentUser, setCurrentUser] = useState<{
@@ -171,6 +174,66 @@ export default function Dashboard() {
     }
   };
 
+  const handleViewAllLicenses = async (filterUsername?: string) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const url = filterUsername
+        ? `http://127.0.0.1:5000/licenses?username=${encodeURIComponent(filterUsername)}`
+        : "http://127.0.0.1:5000/licenses";
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setAllLicenses(data.licenses);
+        setShowAllLicenses(true);
+      } else if (res.status === 403) {
+        setError(`Access Denied: ${data.message}`);
+      } else {
+        setError(data.error || "Failed to fetch licenses");
+      }
+    } catch (err) {
+      setError("Failed to connect to backend");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteLicense = async (licenseId: number) => {
+    if (!confirm(`Are you sure you want to delete license #${licenseId}?`)) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch(`http://127.0.0.1:5000/licenses/${licenseId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        // Refresh the list
+        handleViewAllLicenses(licenseFilter);
+      } else if (res.status === 403) {
+        setError(`Access Denied: ${data.message}`);
+      } else {
+        setError(data.error || "Failed to delete license");
+      }
+    } catch (err) {
+      setError("Failed to connect to backend");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isAdmin = currentUser?.role === "admin";
 
   return (
@@ -199,7 +262,7 @@ export default function Dashboard() {
           <h3 className="text-sm text-gray-400 mb-2">
             🔒 ACCESS CONTROL MATRIX
           </h3>
-          <div className="grid grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-4 gap-4 text-xs">
             <div
               className={`p-2 rounded ${isAdmin ? "bg-green-900/30 border border-green-500" : "bg-red-900/30 border border-red-500"}`}
             >
@@ -214,6 +277,12 @@ export default function Dashboard() {
               className={`p-2 rounded ${isAdmin ? "bg-green-900/30 border border-green-500" : "bg-red-900/30 border border-red-500"}`}
             >
               <span className="block font-bold">View Users</span>
+              <span>{isAdmin ? "✅ Allowed" : "❌ Denied"}</span>
+            </div>
+            <div
+              className={`p-2 rounded ${isAdmin ? "bg-green-900/30 border border-green-500" : "bg-red-900/30 border border-red-500"}`}
+            >
+              <span className="block font-bold">View All Licenses</span>
               <span>{isAdmin ? "✅ Allowed" : "❌ Denied"}</span>
             </div>
           </div>
@@ -285,7 +354,7 @@ export default function Dashboard() {
                   📋 Copy
                 </button>
                 <a
-                  href="/validate"
+                  href={`/validate?token=${encodeURIComponent(generatedKey)}`}
                   className="text-xs bg-blue-700 hover:bg-blue-600 px-3 py-1 rounded"
                 >
                   🔍 Validate
@@ -344,6 +413,105 @@ export default function Dashboard() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* View All Licenses Section (Admin Only) */}
+          {isAdmin && (
+            <div className="mt-8 pt-8 border-t border-gray-800">
+              <h2 className="text-lg font-bold mb-4 text-yellow-400">
+                📄 View All Licenses
+              </h2>
+              <p className="text-gray-500 text-xs mb-4">
+                View all issued licenses. Filter by username/client name.
+              </p>
+              <div className="flex gap-4 items-center mb-4">
+                <input
+                  className="flex-1 bg-black border border-gray-700 p-3 rounded text-green-400"
+                  placeholder="Filter by username (leave empty for all)"
+                  value={licenseFilter}
+                  onChange={(e) => setLicenseFilter(e.target.value)}
+                />
+                <button
+                  onClick={() => handleViewAllLicenses(licenseFilter)}
+                  disabled={loading}
+                  className="bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-700 text-white font-bold px-6 py-2 rounded"
+                >
+                  {loading ? "Loading..." : "VIEW LICENSES"}
+                </button>
+                {licenseFilter && (
+                  <button
+                    onClick={() => {
+                      setLicenseFilter("");
+                      handleViewAllLicenses("");
+                    }}
+                    className="bg-gray-600 hover:bg-gray-700 text-white font-bold px-4 py-2 rounded text-sm"
+                  >
+                    CLEAR
+                  </button>
+                )}
+              </div>
+
+              {showAllLicenses && (
+                <div className="mt-4">
+                  <p className="text-gray-400 text-xs mb-2">
+                    Showing {allLicenses.length} license(s)
+                    {licenseFilter && ` matching "${licenseFilter}"`}
+                  </p>
+                  {allLicenses.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No licenses found.</p>
+                  ) : (
+                    <div className="bg-black rounded border border-yellow-500/30 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-gray-700 text-gray-400">
+                            <th className="p-2 text-left">ID</th>
+                            <th className="p-2 text-left">Issued To</th>
+                            <th className="p-2 text-left">Issued By</th>
+                            <th className="p-2 text-left">Created</th>
+                            <th className="p-2 text-left">Expires</th>
+                            <th className="p-2 text-left">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allLicenses.map((license) => (
+                            <tr key={license.id} className="border-b border-gray-800 hover:bg-gray-900">
+                              <td className="p-2 text-gray-500">#{license.id}</td>
+                              <td className="p-2 text-cyan-300">{license.issued_to}</td>
+                              <td className="p-2 text-purple-300">{license.issued_by}</td>
+                              <td className="p-2 text-gray-500">{license.created_at}</td>
+                              <td className="p-2 text-yellow-400">{license.expires_at || "N/A"}</td>
+                              <td className="p-2">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => navigator.clipboard.writeText(license.token_blob)}
+                                    className="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded"
+                                  >
+                                    📋 Copy
+                                  </button>
+                                  <a
+                                    href={`/validate?token=${encodeURIComponent(license.token_blob)}`}
+                                    className="text-xs bg-green-700 hover:bg-green-600 px-2 py-1 rounded"
+                                  >
+                                    🔍 Validate
+                                  </a>
+                                  <button
+                                    onClick={() => handleDeleteLicense(license.id)}
+                                    disabled={loading}
+                                    className="text-xs bg-red-700 hover:bg-red-600 disabled:bg-gray-700 px-2 py-1 rounded"
+                                  >
+                                    🗑️ Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -451,10 +619,10 @@ export default function Dashboard() {
                           <td className="p-2 text-cyan-300">{log.username || "-"}</td>
                           <td className="p-2">
                             <span className={`px-2 py-0.5 rounded text-xs ${log.action.includes("FAILED") || log.action.includes("RATE_LIMITED")
-                                ? "bg-red-900 text-red-300"
-                                : log.action.includes("GENERATED")
-                                  ? "bg-green-900 text-green-300"
-                                  : "bg-blue-900 text-blue-300"
+                              ? "bg-red-900 text-red-300"
+                              : log.action.includes("GENERATED")
+                                ? "bg-green-900 text-green-300"
+                                : "bg-blue-900 text-blue-300"
                               }`}>
                               {log.action}
                             </span>

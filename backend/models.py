@@ -259,6 +259,39 @@ def get_all_licenses():
     return licenses
 
 
+def get_licenses_filtered(username_filter: str = None):
+    """
+    Retrieve licenses with optional username filter.
+    Filters by issued_to (client name) matching the filter string.
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    if username_filter and username_filter.strip():
+        # Use LIKE for partial matching
+        c.execute(
+            "SELECT id, issued_to, issued_by, token_blob, expires_at, created_at FROM licenses WHERE issued_to LIKE ?",
+            (f"%{username_filter.strip()}%",)
+        )
+    else:
+        c.execute("SELECT id, issued_to, issued_by, token_blob, expires_at, created_at FROM licenses")
+    
+    licenses = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return licenses
+
+
+def delete_license(license_id: int):
+    """Delete a license by its ID."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM licenses WHERE id = ?", (license_id,))
+    rows_deleted = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows_deleted > 0
+
+
 def get_user_licenses(username: str):
     """Retrieve licenses issued TO a specific user."""
     conn = get_db_connection()
