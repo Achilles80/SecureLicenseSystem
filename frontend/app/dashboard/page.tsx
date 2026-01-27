@@ -292,7 +292,7 @@ export default function Dashboard() {
               href="/validate"
               className="inline-block bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded"
             >
-              🔍 VALIDATE A TOKEN
+              VALIDATE A TOKEN
             </a>
           </div>
         </div>
@@ -357,7 +357,7 @@ export default function Dashboard() {
                   href={`/validate?token=${encodeURIComponent(generatedKey)}`}
                   className="text-xs bg-blue-700 hover:bg-blue-600 px-3 py-1 rounded"
                 >
-                  🔍 Validate
+                  Validate
                 </a>
               </div>
             </div>
@@ -495,7 +495,7 @@ export default function Dashboard() {
                                     href={`/validate?token=${encodeURIComponent(license.token_blob)}`}
                                     className="text-xs bg-green-700 hover:bg-green-600 px-2 py-1 rounded"
                                   >
-                                    🔍 Validate
+                                    Validate
                                   </a>
                                   <button
                                     onClick={() => handleDeleteLicense(license.id)}
@@ -566,7 +566,7 @@ export default function Dashboard() {
                               href={`/validate?token=${encodeURIComponent(license.token_blob)}`}
                               className="text-xs bg-green-700 hover:bg-green-600 px-3 py-1 rounded"
                             >
-                              🔍 Validate
+                              Validate
                             </a>
                           </div>
                         </div>

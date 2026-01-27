@@ -217,14 +217,13 @@ export default function LoginPage() {
 
             {/* OTP Timer Display */}
             <div className={`text-center mb-4 p-2 rounded border ${otpTimer > 60
-                ? "bg-green-900/20 border-green-500/50 text-green-400"
-                : otpTimer > 0
-                  ? "bg-red-900/20 border-red-500/50 text-red-400 animate-pulse"
-                  : "bg-gray-800 border-gray-700 text-gray-500"
+              ? "bg-green-900/20 border-green-500/50 text-green-400"
+              : otpTimer > 0
+                ? "bg-red-900/20 border-red-500/50 text-red-400 animate-pulse"
+                : "bg-gray-800 border-gray-700 text-gray-500"
               }`}>
               {otpTimer > 0 ? (
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-lg">⏱️</span>
                   <span className="font-mono text-xl font-bold">{formatTime(otpTimer)}</span>
                   <span className="text-xs">remaining</span>
                 </div>
