@@ -1,7 +1,27 @@
-# Ignore Database and Keys
-backend/*.db
-backend/__pycache__/
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
 
-# Ignore System files
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+
+# Keys (NEVER commit these!)
+backend/keys/
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+.next/
+out/
+dist/
+
+# OS
 .DS_Store
 Thumbs.db
