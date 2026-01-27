@@ -1,17 +1,16 @@
 """
-License Management Routes for SecureLicenseSystem
+License Management Routes - handles license generation, validation, and admin operations.
 
 Endpoints:
-- POST /license/generate - Generate license (Admin only)
-- POST /license/validate - Validate license (User/Admin)
-- GET /license/all - List all licenses (Admin only)
-- GET /users - List all users (Admin only)
-- GET /access-control-info - Get ACM documentation
-
-Access Control:
-- generate_license: Admin only
-- validate_license: Admin, User, Guest
-- view_users: Admin only
+- POST /generate_license   - Generate encrypted+signed license (Admin only)
+- POST /validate_license   - Validate license (authenticated users)
+- POST /validate_public    - Public validation (no auth required)
+- GET  /licenses           - List all licenses with optional filter (Admin only)
+- DELETE /licenses/<id>    - Delete a license (Admin only)
+- GET  /my-licenses        - Get current user's licenses
+- GET  /users              - List all users (Admin only)
+- GET  /access-control     - View Access Control Matrix
+- GET  /audit-logs         - View audit logs (Admin only)
 """
 
 from flask import Blueprint, request, jsonify, g
@@ -25,18 +24,7 @@ license_bp = Blueprint('license', __name__)
 @license_bp.route('/generate_license', methods=['POST'])
 @require_role('generate_license')
 def generate_license():
-    """
-    Generate a new encrypted signed license with expiry.
-    
-    ACCESS: Admin only
-    
-    Request Body:
-        {"client_name": "string", "expiry_days": int (optional, default 30)}
-    
-    Response:
-        200: License token with expiry date
-        403: Access denied
-    """
+    """Generate encrypted+signed license. Admin only."""
     from datetime import datetime, timedelta
     
     data = request.json
@@ -45,19 +33,16 @@ def generate_license():
         return jsonify({"error": "Request body required"}), 400
     
     client_name = data.get('client_name', '').strip()
-    expiry_days = data.get('expiry_days', 30)  # Default 30 days
+    expiry_days = data.get('expiry_days', 30)
     
     if not client_name:
         return jsonify({"error": "Client name is required"}), 400
     
-    # Calculate expiry date
     expires_at = datetime.now() + timedelta(days=expiry_days)
     expires_at_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
     
-    # Generate license token (encrypts, signs, encodes)
     token = create_license_token(client_name)
     
-    # Save to database with expiry
     issued_by = g.current_user['username']
     license_id = models.save_license(
         issued_to=client_name,
@@ -67,7 +52,6 @@ def generate_license():
         expires_at=expires_at_str
     )
     
-    # Audit log
     models.log_audit(
         username=issued_by,
         action="LICENSE_GENERATED",
@@ -91,25 +75,7 @@ def generate_license():
 @license_bp.route('/validate_license', methods=['POST'])
 @require_role('validate_license')
 def validate_license():
-    """
-    Validate a license token.
-    
-    ACCESS: Admin, User (anyone authenticated)
-    
-    This verifies:
-    1. Base64 decoding is successful
-    2. RSA digital signature is valid (integrity + authenticity)
-    3. Data structure is correct
-    
-    Request Body:
-        {
-            "license_key": "string"
-        }
-    
-    Response:
-        200: License is valid
-        400: License is invalid or tampered
-    """
+    """Validate license token. Requires authentication."""
     data = request.json
     
     if not data:
@@ -120,7 +86,6 @@ def validate_license():
     if not token:
         return jsonify({"error": "License key is required"}), 400
     
-    # Validate token
     is_valid, message = validate_license_token(token)
     
     if is_valid:
@@ -141,12 +106,7 @@ def validate_license():
 
 @license_bp.route('/validate_public', methods=['POST'])
 def validate_license_public():
-    """
-    Public license validation endpoint (no auth required).
-    
-    This allows anyone to verify a license without logging in.
-    Useful for customers to verify their licenses.
-    """
+    """Public license validation (no auth required). For customer verification."""
     data = request.json
     
     if not data:
@@ -157,14 +117,10 @@ def validate_license_public():
     if not token:
         return jsonify({"error": "License key is required"}), 400
     
-    # Validate token
     is_valid, message = validate_license_token(token)
     
     if is_valid:
-        return jsonify({
-            "valid": True,
-            "message": message
-        }), 200
+        return jsonify({"valid": True, "message": message}), 200
     else:
         return jsonify({
             "valid": False,
@@ -176,18 +132,7 @@ def validate_license_public():
 @license_bp.route('/licenses', methods=['GET'])
 @require_role('view_users')
 def get_all_licenses():
-    """
-    Get all issued licenses with optional username filter.
-    
-    ACCESS: Admin only
-    
-    Query Params:
-        username: Filter licenses by issued_to (client name) - partial match
-    
-    Response:
-        200: List of all licenses (filtered if username provided)
-        403: Access denied for non-admin users
-    """
+    """Get all licenses with optional username filter. Admin only."""
     username_filter = request.args.get('username', None)
     
     if username_filter:
@@ -205,27 +150,16 @@ def get_all_licenses():
 @license_bp.route('/licenses/<int:license_id>', methods=['DELETE'])
 @require_role('view_users')
 def delete_license(license_id):
-    """
-    Delete a license by ID.
-    
-    ACCESS: Admin only
-    
-    Response:
-        200: License deleted successfully
-        404: License not found
-        403: Access denied for non-admin users
-    """
+    """Delete a license by ID. Admin only."""
     deleted = models.delete_license(license_id)
     
     if deleted:
-        # Audit log
         models.log_audit(
             username=g.current_user['username'],
             action="LICENSE_DELETED",
             details=f"License #{license_id} deleted",
             ip_address=request.remote_addr
         )
-        
         return jsonify({
             "success": True,
             "message": f"License #{license_id} deleted successfully"
@@ -240,17 +174,7 @@ def delete_license(license_id):
 @license_bp.route('/my-licenses', methods=['GET'])
 @require_auth
 def get_my_licenses():
-    """
-    Get licenses issued TO the current user.
-    
-    ACCESS: Any authenticated user
-    
-    This allows users to see licenses that have been issued to them.
-    Users search by their username (client name).
-    
-    Response:
-        200: List of user's licenses with full token
-    """
+    """Get licenses issued to current user."""
     username = g.current_user['username']
     licenses = models.get_user_licenses(username)
     
@@ -264,17 +188,7 @@ def get_my_licenses():
 @license_bp.route('/users', methods=['GET'])
 @require_role('view_users')
 def get_all_users():
-    """
-    Get all registered users.
-    
-    ACCESS: Admin only
-    
-    This demonstrates Access Control - only admins can view user list.
-    
-    Response:
-        200: List of all users
-        403: Access denied for non-admin users
-    """
+    """Get all registered users. Admin only."""
     users = models.get_all_users()
     
     return jsonify({
@@ -286,29 +200,14 @@ def get_all_users():
 
 @license_bp.route('/access-control', methods=['GET'])
 def get_acl_info():
-    """
-    Get Access Control Matrix information.
-    
-    This endpoint is public for documentation purposes.
-    Shows the ACM, role descriptions, and NIST compliance info.
-    """
+    """Get Access Control Matrix info (public endpoint for documentation)."""
     return jsonify(get_access_control_info()), 200
 
 
 @license_bp.route('/audit-logs', methods=['GET'])
 @require_role('view_users')
 def get_audit_logs_endpoint():
-    """
-    Get audit logs for security monitoring.
-    
-    ACCESS: Admin only
-    
-    Query Params:
-        limit: Number of logs to return (default 100)
-    
-    Response:
-        200: List of audit events
-    """
+    """Get audit logs for security monitoring. Admin only."""
     limit = request.args.get('limit', 100, type=int)
     logs = models.get_audit_logs(limit)
     

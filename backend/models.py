@@ -1,6 +1,12 @@
 """
-Database Models and Operations for SecureLicenseSystem
-Handles all database interactions for users, OTPs, and licenses.
+Database Models and Operations - handles users, OTPs, licenses, and audit logs.
+
+Tables:
+- users         - User accounts with password hashes and roles
+- otp_codes     - One-time passwords for MFA
+- licenses      - Generated license tokens
+- audit_logs    - Security event tracking
+- login_attempts - Rate limiting data
 """
 
 import sqlite3
@@ -9,21 +15,17 @@ from config import DATABASE_PATH
 
 
 def get_db_connection():
-    """Create a database connection with row factory."""
+    """Create database connection with row factory."""
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """
-    Initialize database tables.
-    Creates users, otp_codes, licenses, audit_logs, and login_attempts tables.
-    """
+    """Initialize all database tables."""
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Users table with role for Access Control
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -34,7 +36,6 @@ def init_db():
         )
     ''')
     
-    # OTP codes table for Multi-Factor Authentication
     c.execute('''
         CREATE TABLE IF NOT EXISTS otp_codes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +48,6 @@ def init_db():
         )
     ''')
     
-    # Licenses table with expiry
     c.execute('''
         CREATE TABLE IF NOT EXISTS licenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +60,6 @@ def init_db():
         )
     ''')
     
-    # Audit Logs table - tracks all security events
     c.execute('''
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,7 +71,6 @@ def init_db():
         )
     ''')
     
-    # Login Attempts table - for rate limiting
     c.execute('''
         CREATE TABLE IF NOT EXISTS login_attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,10 +87,7 @@ def init_db():
 
 
 def seed_default_users():
-    """
-    Seed default users for demo purposes.
-    Creates admin, user, and guest accounts with predefined passwords.
-    """
+    """Seed default demo users: admin, user, guest."""
     from utils.crypto import hash_password
     
     default_users = [
@@ -113,18 +108,16 @@ def seed_default_users():
             )
             print(f"  ✅ Created {role} user: {username}")
         except sqlite3.IntegrityError:
-            pass  # User already exists
+            pass
     
     conn.commit()
     conn.close()
 
 
-# =============================================================================
-# USER OPERATIONS
-# =============================================================================
+# User Operations
 
 def create_user(username: str, password_hash: str, salt: str, role: str = "user"):
-    """Create a new user in the database."""
+    """Create a new user. Returns True on success, False if exists."""
     conn = get_db_connection()
     c = conn.cursor()
     try:
@@ -141,7 +134,7 @@ def create_user(username: str, password_hash: str, salt: str, role: str = "user"
 
 
 def get_user(username: str):
-    """Retrieve a user by username."""
+    """Get user by username. Returns dict or None."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE username = ?", (username,))
@@ -151,10 +144,9 @@ def get_user(username: str):
 
 
 def get_all_users():
-    """Retrieve all users (for admin view)."""
+    """Get all users (for admin view)."""
     conn = get_db_connection()
     c = conn.cursor()
-    # Only select columns that exist in both old and new schema
     c.execute("SELECT username, role FROM users")
     users = [{"username": row[0], "role": row[1], "created_at": "N/A"} for row in c.fetchall()]
     conn.close()
@@ -162,7 +154,7 @@ def get_all_users():
 
 
 def update_user_password(username: str, password_hash: str, salt: str) -> bool:
-    """Update a user's password in the database."""
+    """Update user's password. Returns True on success."""
     conn = get_db_connection()
     c = conn.cursor()
     try:
@@ -171,17 +163,15 @@ def update_user_password(username: str, password_hash: str, salt: str) -> bool:
             (password_hash, salt, username)
         )
         conn.commit()
-        updated = c.rowcount > 0
-        return updated
+        return c.rowcount > 0
     finally:
         conn.close()
 
-# =============================================================================
-# OTP OPERATIONS
-# =============================================================================
+
+# OTP Operations
 
 def create_otp(username: str, otp_code: str, expiry_minutes: int = 5):
-    """Store a new OTP code for a user."""
+    """Store new OTP with expiry time."""
     conn = get_db_connection()
     c = conn.cursor()
     expires_at = datetime.now() + timedelta(minutes=expiry_minutes)
@@ -194,15 +184,10 @@ def create_otp(username: str, otp_code: str, expiry_minutes: int = 5):
 
 
 def verify_otp(username: str, otp_code: str) -> bool:
-    """
-    Verify an OTP code for a user.
-    Returns True if valid and not expired, False otherwise.
-    Marks OTP as used after successful verification.
-    """
+    """Verify OTP. Returns True if valid and not expired. Marks as used."""
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Find the most recent unused OTP for this user
     c.execute("""
         SELECT id, otp_code, expires_at 
         FROM otp_codes 
@@ -217,11 +202,9 @@ def verify_otp(username: str, otp_code: str) -> bool:
         conn.close()
         return False
     
-    # Check if OTP matches and is not expired
     if record['otp_code'] == otp_code:
         expires_at = datetime.fromisoformat(record['expires_at'])
         if datetime.now() < expires_at:
-            # Mark as used
             c.execute("UPDATE otp_codes SET is_used = 1 WHERE id = ?", (record['id'],))
             conn.commit()
             conn.close()
@@ -231,12 +214,10 @@ def verify_otp(username: str, otp_code: str) -> bool:
     return False
 
 
-# =============================================================================
-# LICENSE OPERATIONS
-# =============================================================================
+# License Operations
 
 def save_license(issued_to: str, issued_by: str, token_blob: str, signature: str, expires_at: str = None):
-    """Save a generated license to the database with optional expiry."""
+    """Save generated license. Returns license ID."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute(
@@ -250,7 +231,7 @@ def save_license(issued_to: str, issued_by: str, token_blob: str, signature: str
 
 
 def get_all_licenses():
-    """Retrieve all licenses (for admin view)."""
+    """Get all licenses (for admin view)."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT id, issued_to, issued_by, token_blob, expires_at, created_at FROM licenses")
@@ -260,15 +241,11 @@ def get_all_licenses():
 
 
 def get_licenses_filtered(username_filter: str = None):
-    """
-    Retrieve licenses with optional username filter.
-    Filters by issued_to (client name) matching the filter string.
-    """
+    """Get licenses with optional client name filter (partial match)."""
     conn = get_db_connection()
     c = conn.cursor()
     
     if username_filter and username_filter.strip():
-        # Use LIKE for partial matching
         c.execute(
             "SELECT id, issued_to, issued_by, token_blob, expires_at, created_at FROM licenses WHERE issued_to LIKE ?",
             (f"%{username_filter.strip()}%",)
@@ -282,7 +259,7 @@ def get_licenses_filtered(username_filter: str = None):
 
 
 def delete_license(license_id: int):
-    """Delete a license by its ID."""
+    """Delete license by ID. Returns True if deleted."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("DELETE FROM licenses WHERE id = ?", (license_id,))
@@ -293,7 +270,7 @@ def delete_license(license_id: int):
 
 
 def get_user_licenses(username: str):
-    """Retrieve licenses issued TO a specific user."""
+    """Get licenses issued to a specific user."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute(
@@ -305,12 +282,10 @@ def get_user_licenses(username: str):
     return licenses
 
 
-# =============================================================================
-# AUDIT LOGGING
-# =============================================================================
+# Audit Logging
 
 def log_audit(username: str, action: str, details: str = None, ip_address: str = None):
-    """Log an audit event for security monitoring."""
+    """Log security event for monitoring."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute(
@@ -322,7 +297,7 @@ def log_audit(username: str, action: str, details: str = None, ip_address: str =
 
 
 def get_audit_logs(limit: int = 100):
-    """Retrieve recent audit logs (for admin view)."""
+    """Get recent audit logs (for admin view)."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,))
@@ -331,12 +306,10 @@ def get_audit_logs(limit: int = 100):
     return logs
 
 
-# =============================================================================
-# RATE LIMITING
-# =============================================================================
+# Rate Limiting
 
 def record_login_attempt(username: str, success: bool, ip_address: str = None):
-    """Record a login attempt for rate limiting."""
+    """Record login attempt for rate limiting."""
     conn = get_db_connection()
     c = conn.cursor()
     c.execute(
@@ -348,7 +321,7 @@ def record_login_attempt(username: str, success: bool, ip_address: str = None):
 
 
 def get_failed_attempts(username: str, minutes: int = 15) -> int:
-    """Get number of failed login attempts in the last N minutes."""
+    """Count failed login attempts in last N minutes."""
     conn = get_db_connection()
     c = conn.cursor()
     cutoff = datetime.now() - timedelta(minutes=minutes)
@@ -362,6 +335,5 @@ def get_failed_attempts(username: str, minutes: int = 15) -> int:
 
 
 def is_rate_limited(username: str, max_attempts: int = 5, window_minutes: int = 15) -> bool:
-    """Check if user is rate limited due to too many failed attempts."""
-    failed = get_failed_attempts(username, window_minutes)
-    return failed >= max_attempts
+    """Check if user is rate limited (5+ failed attempts in 15 min)."""
+    return get_failed_attempts(username, window_minutes) >= max_attempts

@@ -1,27 +1,12 @@
 """
-Access Control Module for SecureLicenseSystem
+Access Control Module - Implements Role-Based Access Control (RBAC).
 
-This module implements Role-Based Access Control (RBAC) following 
-NIST SP 800-63-2 E-Authentication Architecture Model.
+Features:
+- JWT token management for stateless authentication
+- Access Control Matrix for permission checks
+- Route decorators (@require_auth, @require_role)
 
-Components:
-1. Access Control Matrix - defines who can access what
-2. JWT Token management - stateless authentication
-3. Role decorators - protect Flask routes
-
-Access Control Matrix:
-┌─────────┬──────────────────┬──────────────────┬────────────┐
-│ Role    │ generate_license │ validate_license │ view_users │
-├─────────┼──────────────────┼──────────────────┼────────────┤
-│ Admin   │ ✅ ALLOWED       │ ✅ ALLOWED       │ ✅ ALLOWED │
-│ User    │ ❌ DENIED        │ ✅ ALLOWED       │ ❌ DENIED  │
-│ Guest   │ ❌ DENIED        │ ✅ ALLOWED       │ ❌ DENIED  │
-└─────────┴──────────────────┴──────────────────┴────────────┘
-
-Policy Justification:
-- Admin: System administrators who manage licenses and users
-- User: Regular authenticated users who can only validate licenses
-- Guest: Limited access for public validation only
+Roles: admin (full access), user (validate only), guest (validate only)
 """
 
 import jwt
@@ -37,62 +22,26 @@ from config import (
 )
 
 
-# =============================================================================
-# JWT TOKEN MANAGEMENT
-# =============================================================================
+# JWT Token Management
 
 def create_jwt_token(username: str, role: str) -> str:
-    """
-    Create a JWT token for authenticated user.
-    
-    Args:
-        username: The authenticated username
-        role: The user's role (admin, user, guest)
-    
-    Returns:
-        Encoded JWT token string
-    
-    Security:
-        - Token expires after JWT_EXPIRY_HOURS (24h)
-        - Signed with HS256 using JWT_SECRET
-        - Contains role for authorization checks
-    """
+    """Create a signed JWT token with 24h expiry."""
     payload = {
-        "sub": username,  # Subject (who the token is for)
-        "role": role,     # Role for RBAC
-        "iat": datetime.utcnow(),  # Issued at
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS)  # Expiry
+        "sub": username,
+        "role": role,
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS)
     }
-    
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    return token
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def decode_jwt_token(token: str) -> dict:
-    """
-    Decode and validate a JWT token.
-    
-    Args:
-        token: The JWT token string
-    
-    Returns:
-        Decoded payload dictionary
-    
-    Raises:
-        jwt.ExpiredSignatureError: If token is expired
-        jwt.InvalidTokenError: If token is invalid
-    """
-    payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-    return payload
+    """Decode and validate a JWT token. Raises error if expired/invalid."""
+    return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
 
 def get_current_user():
-    """
-    Get the current user from the request's JWT token.
-    
-    Returns:
-        Dict with username and role, or None if not authenticated
-    """
+    """Extract current user from Authorization header. Returns None if invalid."""
     auth_header = request.headers.get('Authorization')
     
     if not auth_header or not auth_header.startswith('Bearer '):
@@ -102,86 +51,39 @@ def get_current_user():
     
     try:
         payload = decode_jwt_token(token)
-        return {
-            "username": payload["sub"],
-            "role": payload["role"]
-        }
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
+        return {"username": payload["sub"], "role": payload["role"]}
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 
 
-# =============================================================================
-# ACCESS CONTROL DECORATORS
-# =============================================================================
+# Access Control Decorators
 
 def check_permission(role: str, resource: str) -> bool:
-    """
-    Check if a role has permission to access a resource.
-    
-    Args:
-        role: The user's role
-        resource: The resource/action being accessed
-    
-    Returns:
-        True if allowed, False if denied
-    """
+    """Check if role has permission to access resource in the ACM."""
     if role not in ACCESS_CONTROL_MATRIX:
         return False
-    
-    role_permissions = ACCESS_CONTROL_MATRIX[role]
-    return role_permissions.get(resource, False)
+    return ACCESS_CONTROL_MATRIX[role].get(resource, False)
 
 
 def require_auth(f):
-    """
-    Decorator to require authentication for a route.
-    
-    Usage:
-        @app.route('/protected')
-        @require_auth
-        def protected_route():
-            user = g.current_user  # Access current user
-            return jsonify({"message": f"Hello {user['username']}"})
-    """
+    """Decorator: Requires valid JWT token. Sets g.current_user."""
     @wraps(f)
     def decorated(*args, **kwargs):
         user = get_current_user()
-        
         if not user:
             return jsonify({
                 "error": "Unauthorized",
                 "message": "Valid authentication token required"
             }), 401
-        
-        # Store user in Flask's g object for route access
         g.current_user = user
-        
         return f(*args, **kwargs)
-    
     return decorated
 
 
 def require_role(resource: str):
     """
-    Decorator factory to require specific permission for a route.
-    
-    This checks the Access Control Matrix to verify the user's role
-    has permission to access the specified resource.
-    
-    Usage:
-        @app.route('/admin/generate')
-        @require_role('generate_license')
-        def generate():
-            # Only admins can reach here
-            return jsonify({"message": "License generated"})
-    
-    Args:
-        resource: The resource name in the Access Control Matrix
-    
-    Returns:
-        Decorator function
+    Decorator factory: Requires specific permission from ACM.
+    Usage: @require_role('generate_license')
     """
     def decorator(f):
         @wraps(f)
@@ -194,7 +96,6 @@ def require_role(resource: str):
                     "message": "Valid authentication token required"
                 }), 401
             
-            # Check Access Control Matrix
             if not check_permission(user['role'], resource):
                 return jsonify({
                     "error": "Forbidden",
@@ -203,27 +104,16 @@ def require_role(resource: str):
                     "your_role": user['role']
                 }), 403
             
-            # Store user in Flask's g object
             g.current_user = user
-            
             return f(*args, **kwargs)
-        
         return decorated
-    
     return decorator
 
 
-# =============================================================================
-# ACCESS CONTROL INFORMATION ENDPOINTS DATA
-# =============================================================================
+# Access Control Info
 
 def get_access_control_info() -> dict:
-    """
-    Get information about the access control system for documentation.
-    
-    Returns:
-        Dictionary with ACM and role descriptions
-    """
+    """Return ACM documentation for API endpoint."""
     return {
         "access_control_matrix": ACCESS_CONTROL_MATRIX,
         "roles": {
@@ -236,7 +126,7 @@ def get_access_control_info() -> dict:
                 "permissions": ["Validate licenses only"]
             },
             "guest": {
-                "description": "Unauthenticated or minimal access user",
+                "description": "Minimal access user",
                 "permissions": ["Validate licenses only"]
             }
         },
