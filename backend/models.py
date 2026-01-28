@@ -282,6 +282,16 @@ def get_user_licenses(username: str):
     return licenses
 
 
+def license_exists_in_db(token_blob: str) -> bool:
+    """Check if a license token exists in the database (not deleted)."""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT id FROM licenses WHERE token_blob = ?", (token_blob,))
+    result = c.fetchone()
+    conn.close()
+    return result is not None
+
+
 # Audit Logging
 
 def log_audit(username: str, action: str, details: str = None, ip_address: str = None):

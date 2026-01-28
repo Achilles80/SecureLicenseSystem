@@ -86,6 +86,15 @@ def validate_license():
     if not token:
         return jsonify({"error": "License key is required"}), 400
     
+    # Check if license exists in database (not deleted)
+    if not models.license_exists_in_db(token):
+        print(f"❌ License not found in database (may have been deleted)")
+        return jsonify({
+            "valid": False,
+            "error": "License not found",
+            "message": "This license does not exist or has been revoked"
+        }), 400
+    
     is_valid, message = validate_license_token(token)
     
     if is_valid:
@@ -116,6 +125,14 @@ def validate_license_public():
     
     if not token:
         return jsonify({"error": "License key is required"}), 400
+    
+    # Check if license exists in database (not deleted)
+    if not models.license_exists_in_db(token):
+        return jsonify({
+            "valid": False,
+            "error": "License not found",
+            "message": "This license does not exist or has been revoked"
+        }), 400
     
     is_valid, message = validate_license_token(token)
     
