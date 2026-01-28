@@ -16,6 +16,40 @@ A comprehensive demonstration of cybersecurity concepts including encryption, di
 | **Access Control** | Role-Based Access Control (RBAC) |
 | **Encoding** | Base64 for token transmission |
 
+## 📸 Screenshots
+
+### 1. Secure Registration
+*Enforces strong password policy (uppercase, lowercase, special chars)*
+![Secure Registration](output_screenshots/demo_signup.png)
+
+### 2. Multi-Factor Authentication
+*OTP is sent to the secure server console (simulating SMS/Email)*
+![OTP Console](output_screenshots/demo_otp_console.png)
+
+### 3. Password Recovery Flow
+*Secure identity verification before password reset*
+![Forgot Password](output_screenshots/demo_forgot_password.png)
+
+### 4. Password Reset
+*New password must also meet strict security requirements*
+![Reset Password](output_screenshots/demo_reset_password.png)
+
+### 5. License Tamper Detection
+*Digital signatures ensure unauthorized modifications are detected immediately*
+![Tamper Detection](output_screenshots/demo_invalid_license.png)
+
+### 6. Admin Dashboard
+*Full control over license generation and user management*
+![Admin Dashboard](output_screenshots/demo_admin_dashboard.png)
+
+### 7. User Management
+*Admin view of all registered users and their roles*
+![User Management](output_screenshots/demo_view_users.png)
+
+### 8. Audit Logs
+*Comprehensive tracking of all security events (logins, failures, license generation)*
+![Audit Logs](output_screenshots/demo_audit_logs.png)
+
 ## Architecture
 
 ```
