@@ -334,7 +334,7 @@ def get_failed_attempts(username: str, minutes: int = 15) -> int:
     """Count failed login attempts in last N minutes."""
     conn = get_db_connection()
     c = conn.cursor()
-    cutoff = datetime.now() - timedelta(minutes=minutes)
+    cutoff = datetime.utcnow() - timedelta(minutes=minutes)
     c.execute(
         "SELECT COUNT(*) FROM login_attempts WHERE username = ? AND success = 0 AND attempt_time > ?",
         (username, cutoff)
