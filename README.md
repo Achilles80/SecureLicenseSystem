@@ -1,8 +1,10 @@
+Roll No: CB.SC.U4CSE23102
+23CSE313: Foundations of CyberSecurity Lab Evaluation-1
 # 🔐 SecureLicenseSystem
 
 A comprehensive demonstration of cybersecurity concepts including encryption, digital signatures, multi-factor authentication, and role-based access control.
 
-## 🎯 Features
+## Features
 
 | Feature | Implementation |
 |---------|---------------|
@@ -14,7 +16,7 @@ A comprehensive demonstration of cybersecurity concepts including encryption, di
 | **Access Control** | Role-Based Access Control (RBAC) |
 | **Encoding** | Base64 for token transmission |
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 SecureLicenseSystem/
@@ -39,7 +41,7 @@ SecureLicenseSystem/
         └── reset-password/ # Password reset
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.10+
@@ -61,7 +63,7 @@ npm run dev
 
 Open http://localhost:3000 in your browser.
 
-## 👥 Demo Accounts
+## Demo Accounts
 
 | Username | Password | Role | Permissions |
 |----------|----------|------|-------------|
@@ -69,7 +71,7 @@ Open http://localhost:3000 in your browser.
 | `user` | `user123` | User | Validate only |
 | `guest` | `guest123` | Guest | Validate only |
 
-## 🔑 API Endpoints
+## API Endpoints
 
 ### Authentication
 | Method | Endpoint | Description |
@@ -99,7 +101,7 @@ Open http://localhost:3000 in your browser.
 | GET | `/audit-logs` | Security logs |
 | GET | `/access-control` | View ACM |
 
-## 🛡️ Security Concepts Demonstrated
+## Security Concepts Demonstrated
 
 ### 1. Encoding vs Encryption
 - **Base64**: Format conversion (NOT security) - anyone can decode
@@ -133,7 +135,7 @@ Open http://localhost:3000 in your browser.
 | MFA Bypass | OTP with 5-min expiry |
 | Privilege Escalation | Role-based access control |
 
-## 📝 License Token Format
+## License Token Format
 
 ```
 Base64( IV[16 bytes] + Signature[256 bytes] + Ciphertext )
@@ -143,21 +145,21 @@ Base64( IV[16 bytes] + Signature[256 bytes] + Ciphertext )
 2. **Signature**: RSA-PSS signature of ciphertext
 3. **Ciphertext**: AES-256-CBC encrypted payload
 
-## ⚠️ Important Notes
+## Important Notes
 
 - RSA keys are regenerated on server restart (demo mode)
 - Licenses created before restart will show as "tampered"
 - In production, persist keys to maintain license validity
 - OTPs are displayed in server console (demo mode)
 
-## 🧪 Testing the Tamper Detection
+## Testing the Tamper Detection
 
 1. Generate a license from the dashboard
 2. Click "Validate" - should show ✅ Valid
 3. Click "Tamper" button to modify the token
 4. Click "Validate" again - should show ❌ Invalid (tampering detected)
 
-## 📚 Tech Stack
+## Tech Stack
 
 - **Backend**: Python, Flask, SQLite, cryptography library
 - **Frontend**: Next.js 14, React, TypeScript, TailwindCSS
@@ -165,4 +167,4 @@ Base64( IV[16 bytes] + Signature[256 bytes] + Ciphertext )
 
 ---
 
-*Built for Cybersecurity Lab Demonstration*
+
